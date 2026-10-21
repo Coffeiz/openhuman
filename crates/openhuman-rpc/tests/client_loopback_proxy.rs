@@ -1,8 +1,8 @@
 //! The local core must not be reached through the process proxy.
 //!
-//! A proxy lives on another host: it cannot answer for the caller's own
-//! `127.0.0.1`. A request that goes through one comes back as a `502` with
-//! an empty body, which is what the desktop app reports as "core rpc
+//! A proxy is not the local core: it forwards the request to a hop that
+//! cannot reach the caller's own `127.0.0.1`, and that hop answers `502`
+//! with an empty body. This is what the desktop app reports as "core rpc
 //! returned a non-JSON body (http 502)".
 //!
 //! These cases live in their own binary on purpose: the proxy variables they

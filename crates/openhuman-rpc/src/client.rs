@@ -35,11 +35,11 @@ pub fn redact_url_for_log(url: &str) -> String {
 
 /// Whether a URL points at this machine's loopback interface.
 ///
-/// A proxy lives on another host, so it cannot reach the caller's own
-/// `127.0.0.1`: routing a loopback request through one makes the proxy
-/// answer for it, and it answers `502` with an empty body. Loopback
-/// targets are therefore never proxied, whatever `HTTP_PROXY` /
-/// `ALL_PROXY` say and whatever `NO_PROXY` happens to list.
+/// A proxy is not the local core: it forwards a request to wherever its own
+/// rules send it, and a remote hop cannot reach the caller's own loopback
+/// interface — it answers `502` with an empty body instead. Loopback targets
+/// are therefore never proxied, whatever `HTTP_PROXY` / `ALL_PROXY` say and
+/// whatever `NO_PROXY` happens to list.
 fn is_loopback_url(url: &str) -> bool {
     let Ok(parsed) = url.parse::<url::Url>() else {
         return false;
@@ -51,7 +51,11 @@ fn is_loopback_url(url: &str) -> bool {
         .trim_start_matches('[')
         .trim_end_matches(']')
         .to_ascii_lowercase();
-    host == "127.0.0.1" || host == "::1" || host == "localhost" || host.ends_with(".localhost")
+    if let Ok(address) = host.parse::<std::net::IpAddr>() {
+        // The loopback ranges: `127.0.0.0/8` and `::1`.
+        return address.is_loopback();
+    }
+    host == "localhost" || host.ends_with(".localhost")
 }
 
 /// POST a JSON-RPC body and preserve the endpoint's status and body verbatim.
