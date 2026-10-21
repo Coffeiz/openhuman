@@ -79,6 +79,9 @@ fn loopback_urls_are_recognized() {
     assert!(is_loopback_url("http://[::1]:7788/rpc"));
     assert!(is_loopback_url("http://core.localhost:7788/rpc"));
     assert!(is_loopback_url("https://127.0.0.1:7788/rpc"));
+    // The whole 127.0.0.0/8 range is loopback, not only 127.0.0.1.
+    assert!(is_loopback_url("http://127.0.0.2:7788/rpc"));
+    assert!(is_loopback_url("http://127.1.2.3:7788/rpc"));
 }
 
 #[test]
@@ -86,12 +89,13 @@ fn remote_and_unparseable_urls_are_not_loopback() {
     assert!(!is_loopback_url("http://core.example.com/rpc"));
     assert!(!is_loopback_url("http://192.168.1.74:7788/rpc"));
     assert!(!is_loopback_url("http://127.0.0.1.example.com:7788/rpc"));
+    assert!(!is_loopback_url("http://0.0.0.0:7788/rpc"));
     assert!(!is_loopback_url("not a url"));
     assert!(!is_loopback_url(""));
 }
 
 /// The local core is reachable on loopback even when the environment names
-/// a proxy: a proxy lives on another host and cannot answer for the
+/// a proxy: a proxy forwards the request to a hop that cannot reach the
 /// caller's own `127.0.0.1`.
 #[tokio::test]
 async fn post_json_rpc_reaches_a_loopback_endpoint() {
@@ -105,8 +109,12 @@ async fn post_json_rpc_reaches_a_loopback_endpoint() {
 
 #[tokio::test]
 async fn post_json_rpc_reports_a_refused_endpoint() {
-    // Port 9 is discard; nothing listens on it in a test environment.
-    let error = post_json_rpc("http://127.0.0.1:9/rpc", None, "{}")
+    // A port that was just released: the kernel hands it out, so nothing is
+    // listening on it. A fixed port would depend on the machine instead.
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind a loopback port");
+    let port = listener.local_addr().expect("the bound address").port();
+    drop(listener);
+    let error = post_json_rpc(&format!("http://127.0.0.1:{port}/rpc"), None, "{}")
         .await
         .expect_err("a refused endpoint must surface as an error");
     assert!(error.contains("failed"), "{error}");
