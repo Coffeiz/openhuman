@@ -102,10 +102,27 @@ jobs:
           codesign --force --deep --sign - "${{ steps.locate-app.outputs.path }}"
           codesign --verify --deep --strict "${{ steps.locate-app.outputs.path }}" || true
 
+      - name: Package .app as zip
+        # A directory upload flattens the bundle and drops the
+        # OpenHuman.app/Contents/... wrapper, which makes macOS refuse to
+        # open it ("may be damaged or incomplete"). Zip it with ditto so the
+        # bundle layout, symlinks and resource forks survive the round trip.
+        id: package-app
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_PATH="${{ steps.locate-app.outputs.path }}"
+          STAGE="$RUNNER_TEMP/app-package"
+          mkdir -p "$STAGE"
+          ditto --rsrc --extattr "$APP_PATH" "$STAGE/$(basename "$APP_PATH")"
+          cd "$STAGE"
+          ditto -c -k --sequesterRsrc --keepParent "$(basename "$APP_PATH")" OpenHuman-aarch64-apple-darwin-local.zip
+          echo "zip=$STAGE/OpenHuman-aarch64-apple-darwin-local.zip" >> "$GITHUB_OUTPUT"
+
       - name: Upload .app artifact
         uses: actions/upload-artifact@v7
         with:
           name: OpenHuman-aarch64-apple-darwin-local
-          path: ${{ steps.locate-app.outputs.path }}
+          path: ${{ steps.package-app.outputs.zip }}
           retention-days: 14
           if-no-files-found: error
